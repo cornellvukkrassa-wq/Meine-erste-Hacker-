@@ -117,10 +117,28 @@ class Device:
         if not key.exists():
             key.parent.mkdir(parents=True, exist_ok=True)
             keygen(str(key))
-        signer = PythonRSASigner(Path(str(key) + ".pub").read_text(), key.read_text())
+        self._signer = PythonRSASigner(Path(str(key) + ".pub").read_text(), key.read_text())
+        self._AdbDeviceTcp = AdbDeviceTcp
         self.dev = AdbDeviceTcp(self.host, self.port, default_transport_timeout_s=15)
         print(">> If the TV shows 'Allow USB debugging?', tick 'Always allow' and press OK.")
-        self.dev.connect(rsa_keys=[signer], auth_timeout_s=90)
+        self.dev.connect(rsa_keys=[self._signer], auth_timeout_s=90)
+
+    def _reconnect_python(self):
+        # Disabling launchers/recommendations or setting Home restarts SystemUI,
+        # which briefly drops the ADB socket. Rebuild it instead of crashing.
+        try:
+            self.dev.close()
+        except Exception:
+            pass
+        for attempt in range(6):
+            time.sleep(2)
+            try:
+                self.dev = self._AdbDeviceTcp(self.host, self.port, default_transport_timeout_s=15)
+                self.dev.connect(rsa_keys=[self._signer], auth_timeout_s=30)
+                return
+            except Exception:
+                if attempt == 5:
+                    raise
 
     def shell(self, cmd, check=False):
         if self.backend == "adb":
@@ -128,7 +146,12 @@ class Device:
                                text=True, timeout=120)
             out = r.stdout + r.stderr
         else:
-            out = self.dev.shell(cmd, timeout_s=120, read_timeout_s=120) or ""
+            try:
+                out = self.dev.shell(cmd, timeout_s=120, read_timeout_s=120) or ""
+            except Exception:
+                # One transparent reconnect-and-retry for a dropped socket.
+                self._reconnect_python()
+                out = self.dev.shell(cmd, timeout_s=120, read_timeout_s=120) or ""
         if check and ("Exception" in out or "Error" in out or "Failure" in out):
             raise RuntimeError(f"`{cmd}` failed: {out.strip()}")
         return out
@@ -433,9 +456,13 @@ def disable(dev, pkgs):
         else:
             print(f"  FAILED {pkg}: {out.strip()}")
     # Verify against the package manager rather than trusting the output text.
-    still = [p for p in done if p not in set(packages(dev, "-d"))]
-    if still:
-        print(f"  WARNING: still enabled after disabling: {still}")
+    # Best-effort: a verify timeout must never discard an already-journalled change.
+    try:
+        still = [p for p in done if p not in set(packages(dev, "-d"))]
+        if still:
+            print(f"  WARNING: still enabled after disabling: {still}")
+    except Exception as e:
+        print(f"  (could not re-verify, changes are recorded anyway: {e})")
     return done
 
 
