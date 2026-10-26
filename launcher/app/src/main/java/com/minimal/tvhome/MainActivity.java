@@ -10,11 +10,8 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
-import android.graphics.Paint;
-import android.graphics.RadialGradient;
 import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -75,7 +72,6 @@ public class MainActivity extends Activity {
     private ValueAnimator heroRgb;
     private LinearLayout eyes;
     private View eyeL, eyeR;
-    private View face;
     private final java.util.Random rnd = new java.util.Random();
     private FrameLayout drawer;
     private GridLayout grid;
@@ -128,8 +124,6 @@ public class MainActivity extends Activity {
         handler.post(rotate);
         handler.removeCallbacks(eyesRunnable);
         handler.postDelayed(eyesRunnable, 3000);   // first sighting a few seconds in
-        handler.removeCallbacks(faceRunnable);
-        handler.postDelayed(faceRunnable, 5000);
     }
 
     @Override
@@ -137,9 +131,7 @@ public class MainActivity extends Activity {
         super.onPause();
         handler.removeCallbacks(rotate);
         handler.removeCallbacks(eyesRunnable);
-        handler.removeCallbacks(faceRunnable);
         if (eyes != null) eyes.setAlpha(0f);
-        if (face != null) face.setAlpha(0f);
         if (heroRgb != null && heroRgb.isRunning()) heroRgb.pause();
     }
 
@@ -198,14 +190,6 @@ public class MainActivity extends Activity {
         erp.leftMargin = dp(28);
         eyes.addView(eyeR, erp);
         root.addView(eyes, new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START));
-
-        // A pale mask-face (our own design, not a third-party character) that
-        // surfaces from the dark every few seconds and sinks back.
-        face = new FaceView(this);
-        face.setAlpha(0f);
-        FrameLayout.LayoutParams flp = new FrameLayout.LayoutParams(dp(240), dp(300), Gravity.CENTER);
-        flp.topMargin = -dp(40);
-        root.addView(face, flp);
 
         // Top-right: time, with the weekday and date quietly underneath.
         LinearLayout clockCol = new LinearLayout(this);
@@ -284,8 +268,8 @@ public class MainActivity extends Activity {
         heroTitle.setShadowLayer(26, 0, 4, 0xB3000000);   // soft cinematic glow
         heroTitle.setSingleLine(true);
         heroTitle.setEllipsize(TextUtils.TruncateAt.END);
-        FrameLayout.LayoutParams hlp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        hlp.setMargins(dp(48), 0, dp(48), dp(220));
+        FrameLayout.LayoutParams hlp = new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER);
+        hlp.setMargins(dp(48), 0, dp(48), dp(24));   // dead centre, nudged a touch up
         root.addView(heroTitle, hlp);
 
         // Permanent RGB: the title's colours cycle through the whole spectrum.
@@ -404,7 +388,9 @@ public class MainActivity extends Activity {
             int rw = root.getWidth(), rh = root.getHeight();
             if (rw > dp(260) && rh > dp(400)) {
                 eyes.setTranslationX(dp(80) + rnd.nextInt(rw - dp(240)));
-                eyes.setTranslationY(dp(140) + rnd.nextInt(rh - dp(320)));
+                // Keep to the upper band so they never cross the centred title.
+                int top = dp(130), bot = (int) (rh * 0.40f);
+                eyes.setTranslationY(bot > top ? top + rnd.nextInt(bot - top) : top);
             }
             eyeL.setScaleY(1f);
             eyeR.setScaleY(1f);
@@ -422,19 +408,6 @@ public class MainActivity extends Activity {
         eye.animate().scaleY(0.1f).setDuration(110)
                 .withEndAction(() -> eye.animate().scaleY(1f).setDuration(130).start()).start();
     }
-
-    // The mask-face surfaces from the dark, grows a touch, holds, then recedes.
-    private final Runnable faceRunnable = new Runnable() {
-        @Override public void run() {
-            if (face == null) return;
-            face.setScaleX(0.88f);
-            face.setScaleY(0.88f);
-            face.animate().alpha(0.82f).scaleX(1f).scaleY(1f).setDuration(650).start();
-            handler.postDelayed(() -> face.animate().alpha(0f).scaleX(0.9f).scaleY(0.9f)
-                    .setDuration(900).start(), 1500);
-            handler.postDelayed(this, 5000);   // roughly every 5 seconds
-        }
-    };
 
     // Width of the current hero text, so the RGB gradient spans the whole word.
     private float heroTextWidth = 1f;
@@ -481,11 +454,13 @@ public class MainActivity extends Activity {
 
     private String greetingText() {
         int h = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
-        if (h < 5) return "Gute Nacht";
-        if (h < 11) return "Guten Morgen";
-        if (h < 17) return "Guten Tag";
-        if (h < 22) return "Guten Abend";
-        return "Gute Nacht";
+        String g;
+        if (h < 5) g = "Gute Nacht";
+        else if (h < 11) g = "Guten Morgen";
+        else if (h < 17) g = "Guten Tag";
+        else if (h < 22) g = "Guten Abend";
+        else g = "Gute Nacht";
+        return g + ", Cornell";
     }
 
     private View tile(final App app, final boolean inDock) {
@@ -719,38 +694,5 @@ public class MainActivity extends Activity {
         super.onDestroy();
         io.shutdownNow();
         for (android.animation.Animator a : bgAnims) a.cancel();
-    }
-
-    /** An original pale mask-face whose edges dissolve into darkness. */
-    private static final class FaceView extends View {
-        private final Paint facePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint hollow = new Paint(Paint.ANTI_ALIAS_FLAG);
-
-        FaceView(android.content.Context c) {
-            super(c);
-            hollow.setColor(0xFF060607);
-        }
-
-        @Override
-        protected void onSizeChanged(int w, int h, int ow, int oh) {
-            super.onSizeChanged(w, h, ow, oh);
-            // Solid in the middle, fading to nothing at the rim: rises out of the dark.
-            facePaint.setShader(new RadialGradient(w / 2f, h / 2f, Math.min(w, h) / 2f,
-                    new int[]{0xFFEDEBE4, 0xFFEDEBE4, 0x00EDEBE4},
-                    new float[]{0f, 0.5f, 1f}, Shader.TileMode.CLAMP));
-        }
-
-        @Override
-        protected void onDraw(Canvas cv) {
-            float w = getWidth(), h = getHeight(), cx = w / 2f, cy = h / 2f;
-            cv.drawOval(cx - w * 0.34f, cy - h * 0.44f, cx + w * 0.34f, cy + h * 0.44f, facePaint);
-            float eyeY = cy - h * 0.06f, ex = w * 0.15f, ew = w * 0.12f, eh = h * 0.17f;
-            cv.drawOval(cx - ex - ew / 2, eyeY - eh / 2, cx - ex + ew / 2, eyeY + eh / 2, hollow);
-            cv.drawOval(cx + ex - ew / 2, eyeY - eh / 2, cx + ex + ew / 2, eyeY + eh / 2, hollow);
-            cv.drawRoundRect(cx - w * 0.11f, cy + h * 0.17f, cx + w * 0.11f, cy + h * 0.235f,
-                    dpf(6), dpf(6), hollow);
-        }
-
-        private float dpf(float v) { return v * getResources().getDisplayMetrics().density; }
     }
 }
