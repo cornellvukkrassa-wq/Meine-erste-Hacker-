@@ -130,14 +130,17 @@ class Device:
             self.dev.close()
         except Exception:
             pass
-        for attempt in range(6):
-            time.sleep(2)
+        # Switching the default Home disables the stock launcher and restarts
+        # SystemUI; a slow TV can keep its ADB port shut for half a minute, so
+        # retry for ~60s before giving up.
+        for attempt in range(20):
+            time.sleep(3)
             try:
-                self.dev = self._AdbDeviceTcp(self.host, self.port, default_transport_timeout_s=15)
-                self.dev.connect(rsa_keys=[self._signer], auth_timeout_s=30)
+                self.dev = self._AdbDeviceTcp(self.host, self.port, default_transport_timeout_s=10)
+                self.dev.connect(rsa_keys=[self._signer], auth_timeout_s=20)
                 return
             except Exception:
-                if attempt == 5:
+                if attempt == 19:
                     raise
 
     def shell(self, cmd, check=False):
@@ -647,8 +650,18 @@ def cmd_set_home(args):
         return
     disable(dev, stock)
     dev.shell(f"cmd package set-home-activity {LAUNCHER_ACTIVITY}")
-    if not test_home(dev):
-        print(f"Home test still fails. Undo with {b / 'restore.sh'} or `tv.py restore`.")
+    # The stock launcher is now disabled and ours is the default; the switch is
+    # already applied. The verification just needs the TV's ADB port back, which
+    # can lag the restart - don't turn a late reconnect into a scary traceback.
+    try:
+        if not test_home(dev):
+            print(f"Home test still fails. Undo with {b / 'restore.sh'} or `tv.py restore`.")
+    except Exception as e:
+        print(f"\nHome was switched, but the TV's ADB briefly dropped during the restart "
+              f"so the automatic test could not finish ({e}).\n"
+              f"Check it by hand: press Home on the remote - you should land on the minimal "
+              f"screen. To re-run just the test once the TV has settled:\n"
+              f"  tv.py test-home\nTo undo everything: {b / 'restore.sh'} or `tv.py restore`.")
 
 
 def cmd_test_home(args):
