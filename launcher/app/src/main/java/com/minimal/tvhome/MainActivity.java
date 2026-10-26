@@ -67,11 +67,12 @@ public class MainActivity extends Activity {
     private final ObjectAnimator[] drift = new ObjectAnimator[2];
     private final java.util.List<android.animation.Animator> bgAnims = new ArrayList<>();
     private LinearLayout dock;
+    private GradientDrawable dockGlass;
     private TextView greeting;
     private TextView heroTitle;
     private ValueAnimator heroRgb;
-    private LinearLayout eyes;
-    private View eyeL, eyeR;
+    private EyePair[] eyePairs;
+    private Runnable[] eyeTasks;
     private final java.util.Random rnd = new java.util.Random();
     private FrameLayout drawer;
     private GridLayout grid;
@@ -122,16 +123,24 @@ public class MainActivity extends Activity {
         buildDock();
         handler.removeCallbacks(rotate);
         handler.post(rotate);
-        handler.removeCallbacks(eyesRunnable);
-        handler.postDelayed(eyesRunnable, 3000);   // first sighting a few seconds in
+        if (eyeTasks != null) {
+            handler.removeCallbacks(eyeTasks[0]);
+            handler.removeCallbacks(eyeTasks[1]);
+            handler.postDelayed(eyeTasks[0], 2500);   // staggered first sightings
+            handler.postDelayed(eyeTasks[1], 6000);
+        }
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         handler.removeCallbacks(rotate);
-        handler.removeCallbacks(eyesRunnable);
-        if (eyes != null) eyes.setAlpha(0f);
+        if (eyeTasks != null) {
+            for (Runnable t : eyeTasks) handler.removeCallbacks(t);
+        }
+        if (eyePairs != null) {
+            for (EyePair p : eyePairs) p.box.setAlpha(0f);
+        }
         if (heroRgb != null && heroRgb.isRunning()) heroRgb.pause();
     }
 
@@ -178,18 +187,10 @@ public class MainActivity extends Activity {
                 new int[]{0x66000000, 0x1A000000, 0x33000000, 0xAA000000}));
         root.addView(scrim, match());
 
-        // Easter egg: a pair of glowing eyes that now and then peer out of the
-        // dark, blink once and vanish - our own spooky touch, no FNAF assets.
-        eyeL = glowEye();
-        eyeR = glowEye();
-        eyes = new LinearLayout(this);
-        eyes.setOrientation(LinearLayout.HORIZONTAL);
-        eyes.setAlpha(0f);
-        eyes.addView(eyeL, new LinearLayout.LayoutParams(dp(24), dp(24)));
-        LinearLayout.LayoutParams erp = new LinearLayout.LayoutParams(dp(24), dp(24));
-        erp.leftMargin = dp(28);
-        eyes.addView(eyeR, erp);
-        root.addView(eyes, new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START));
+        // Easter egg: two pairs of glowing eyes that peer out of the dark on
+        // their own staggered timing - our own spooky touch, no FNAF assets.
+        eyePairs = new EyePair[]{makeEyePair(root), makeEyePair(root)};
+        eyeTasks = new Runnable[]{eyeTask(eyePairs[0]), eyeTask(eyePairs[1])};
 
         // Top-right: time, with the weekday and date quietly underneath.
         LinearLayout clockCol = new LinearLayout(this);
@@ -272,12 +273,12 @@ public class MainActivity extends Activity {
         hlp.setMargins(dp(48), 0, dp(48), dp(24));   // dead centre, nudged a touch up
         root.addView(heroTitle, hlp);
 
-        // Permanent RGB: the title's colours cycle through the whole spectrum.
+        // Permanent RGB: the title and the dock edge cycle through the spectrum.
         heroRgb = ValueAnimator.ofFloat(0f, 1f);
         heroRgb.setDuration(5000);
         heroRgb.setRepeatCount(ValueAnimator.INFINITE);
         heroRgb.setInterpolator(new android.view.animation.LinearInterpolator());
-        heroRgb.addUpdateListener(a -> paintHeroRgb((float) a.getAnimatedValue()));
+        heroRgb.addUpdateListener(a -> onRgbTick((float) a.getAnimatedValue()));
         heroRgb.start();
 
         // Top-left: a greeting that follows the time of day - a bit of warmth.
@@ -298,12 +299,13 @@ public class MainActivity extends Activity {
         dock.setPadding(dp(10), dp(10), dp(10), dp(10));
         dock.setClipChildren(false);
         dock.setClipToPadding(false);
-        // A lighter, frosted bar so the dock floats rather than sits in a heavy box.
-        GradientDrawable glass = new GradientDrawable();
-        glass.setColor(0x1AFFFFFF);
-        glass.setCornerRadius(dp(24));
-        glass.setStroke(dp(1), 0x2EFFFFFF);
-        dock.setBackground(glass);
+        // A lighter, frosted bar so the dock floats rather than sits in a heavy
+        // box. Its edge cycles through RGB in step with the title (see onRgbTick).
+        dockGlass = new GradientDrawable();
+        dockGlass.setColor(0x1AFFFFFF);
+        dockGlass.setCornerRadius(dp(24));
+        dockGlass.setStroke(dp(2), 0x80FFFFFF);
+        dock.setBackground(dockGlass);
         HorizontalScrollView dockScroll = new HorizontalScrollView(this);
         dockScroll.setHorizontalScrollBarEnabled(false);
         dockScroll.setClipChildren(false);
@@ -379,30 +381,50 @@ public class MainActivity extends Activity {
         return v;
     }
 
-    // Appear at a random dark spot, hold, blink once, fade out, then schedule
-    // the next sighting a good while later. Posted/removed with resume/pause.
-    private final Runnable eyesRunnable = new Runnable() {
-        @Override public void run() {
-            if (eyes == null) return;
-            View root = eyes.getRootView();
-            int rw = root.getWidth(), rh = root.getHeight();
-            if (rw > dp(260) && rh > dp(400)) {
-                eyes.setTranslationX(dp(80) + rnd.nextInt(rw - dp(240)));
-                // Keep to the upper band so they never cross the centred title.
-                int top = dp(130), bot = (int) (rh * 0.40f);
-                eyes.setTranslationY(bot > top ? top + rnd.nextInt(bot - top) : top);
+    private static final class EyePair {
+        final LinearLayout box;
+        final View l, r;
+        EyePair(LinearLayout box, View l, View r) { this.box = box; this.l = l; this.r = r; }
+    }
+
+    private EyePair makeEyePair(FrameLayout root) {
+        View l = glowEye(), r = glowEye();
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.HORIZONTAL);
+        box.setAlpha(0f);
+        box.addView(l, new LinearLayout.LayoutParams(dp(24), dp(24)));
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(dp(24), dp(24));
+        rp.leftMargin = dp(28);
+        box.addView(r, rp);
+        root.addView(box, new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START));
+        return new EyePair(box, l, r);
+    }
+
+    // One pair's cycle: surface at a random upper-area spot (kept clear of the
+    // centred title), maybe blink, fade out, reschedule itself independently so
+    // the two pairs are rarely in sync. Posted/removed with resume/pause.
+    private Runnable eyeTask(final EyePair p) {
+        return new Runnable() {
+            @Override public void run() {
+                View root = p.box.getRootView();
+                int rw = root.getWidth(), rh = root.getHeight();
+                if (rw > dp(260) && rh > dp(400)) {
+                    p.box.setTranslationX(dp(80) + rnd.nextInt(rw - dp(240)));
+                    // Upper band only, with a clear gap above the centred title.
+                    int top = dp(130), bot = (int) (rh * 0.34f);
+                    p.box.setTranslationY(bot > top ? top + rnd.nextInt(bot - top) : top);
+                }
+                p.l.setScaleY(1f);
+                p.r.setScaleY(1f);
+                p.box.animate().alpha(1f).setDuration(900).start();
+                int who = rnd.nextInt(4);   // both / left / right / neither blink
+                if (who == 0 || who == 1) handler.postDelayed(() -> blink(p.l), 1500);
+                if (who == 0 || who == 2) handler.postDelayed(() -> blink(p.r), 1560);
+                handler.postDelayed(() -> p.box.animate().alpha(0f).setDuration(1100).start(), 2300);
+                handler.postDelayed(this, 4000 + rnd.nextInt(5000));   // every ~4-9s, per pair
             }
-            eyeL.setScaleY(1f);
-            eyeR.setScaleY(1f);
-            eyes.animate().alpha(1f).setDuration(900).start();
-            // Randomly: both blink, only one, or neither - so it feels alive.
-            int who = rnd.nextInt(4);
-            if (who == 0 || who == 1) handler.postDelayed(() -> blink(eyeL), 1500);
-            if (who == 0 || who == 2) handler.postDelayed(() -> blink(eyeR), 1560);
-            handler.postDelayed(() -> eyes.animate().alpha(0f).setDuration(1100).start(), 2300);
-            handler.postDelayed(this, 3000 + rnd.nextInt(3000));   // every ~3-6s
-        }
-    };
+        };
+    }
 
     private void blink(View eye) {
         eye.animate().scaleY(0.1f).setDuration(110)
@@ -419,18 +441,24 @@ public class MainActivity extends Activity {
                 heroTitle.getPaint().measureText(s.toUpperCase(Locale.getDefault())));
     }
 
-    // Continuously cycling rainbow across the title - a permanent RGB glow.
-    private void paintHeroRgb(float phase) {
-        if (heroTitle == null || heroTitle.getText().length() == 0) return;
-        int n = 6;
-        int[] cols = new int[n + 1];
-        for (int i = 0; i <= n; i++) {
-            float hue = (phase * 360f + i * (360f / n)) % 360f;
-            cols[i] = Color.HSVToColor(new float[]{hue, 0.7f, 1f});
+    // One tick of the RGB cycle: repaint the title's rainbow and recolour the
+    // dock's edge to a matching hue, so both pulse through the spectrum together.
+    private void onRgbTick(float phase) {
+        if (heroTitle != null && heroTitle.getText().length() > 0) {
+            int n = 6;
+            int[] cols = new int[n + 1];
+            for (int i = 0; i <= n; i++) {
+                float hue = (phase * 360f + i * (360f / n)) % 360f;
+                cols[i] = Color.HSVToColor(new float[]{hue, 0.7f, 1f});
+            }
+            heroTitle.getPaint().setShader(
+                    new LinearGradient(0, 0, heroTextWidth, 0, cols, null, Shader.TileMode.CLAMP));
+            heroTitle.invalidate();
         }
-        heroTitle.getPaint().setShader(
-                new LinearGradient(0, 0, heroTextWidth, 0, cols, null, Shader.TileMode.CLAMP));
-        heroTitle.invalidate();
+        if (dockGlass != null) {
+            int edge = Color.HSVToColor(new float[]{(phase * 360f) % 360f, 0.85f, 1f});
+            dockGlass.setStroke(dp(2), (edge & 0x00FFFFFF) | 0xB0000000);   // ~69% alpha
+        }
     }
 
     private void setHero(String text) {
