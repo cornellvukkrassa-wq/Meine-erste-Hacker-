@@ -2,6 +2,7 @@ package com.minimal.tvhome;
 
 import android.animation.ObjectAnimator;
 import android.animation.PropertyValuesHolder;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -68,6 +69,7 @@ public class MainActivity extends Activity {
     private LinearLayout dock;
     private TextView greeting;
     private TextView heroTitle;
+    private ValueAnimator heroRgb;
     private LinearLayout eyes;
     private View eyeL, eyeR;
     private final java.util.Random rnd = new java.util.Random();
@@ -113,9 +115,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (greeting != null) {
-            greeting.setText(greetingText());
-            applyTextGradient(greeting);
+        if (greeting != null) greeting.setText(greetingText());
+        if (heroRgb != null) {
+            if (heroRgb.isPaused()) heroRgb.resume(); else if (!heroRgb.isStarted()) heroRgb.start();
         }
         buildDock();
         handler.removeCallbacks(rotate);
@@ -130,6 +132,7 @@ public class MainActivity extends Activity {
         handler.removeCallbacks(rotate);
         handler.removeCallbacks(eyesRunnable);
         if (eyes != null) eyes.setAlpha(0f);
+        if (heroRgb != null && heroRgb.isRunning()) heroRgb.pause();
     }
 
     @Override
@@ -192,6 +195,10 @@ public class MainActivity extends Activity {
         LinearLayout clockCol = new LinearLayout(this);
         clockCol.setOrientation(LinearLayout.VERTICAL);
         clockCol.setGravity(Gravity.END);
+        // Time as HH:mm with a smaller live seconds counter next to it.
+        LinearLayout timeRow = new LinearLayout(this);
+        timeRow.setOrientation(LinearLayout.HORIZONTAL);
+        timeRow.setGravity(Gravity.BOTTOM | Gravity.END);
         TextClock clock = new TextClock(this);
         clock.setFormat12Hour("h:mm");
         clock.setFormat24Hour("HH:mm");
@@ -200,7 +207,19 @@ public class MainActivity extends Activity {
         clock.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
         clock.setShadowLayer(12, 0, 2, 0x88000000);
         clock.setGravity(Gravity.END);
-        clockCol.addView(clock);
+        timeRow.addView(clock);
+        TextClock secs = new TextClock(this);
+        secs.setFormat12Hour(":ss");
+        secs.setFormat24Hour(":ss");
+        secs.setTextColor(0xB3FFFFFF);
+        secs.setTextSize(18);
+        secs.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+        secs.setShadowLayer(8, 0, 1, 0x88000000);
+        LinearLayout.LayoutParams secLp = new LinearLayout.LayoutParams(-2, -2);
+        secLp.leftMargin = dp(3);
+        secLp.bottomMargin = dp(5);
+        timeRow.addView(secs, secLp);
+        clockCol.addView(timeRow);
         TextClock date = new TextClock(this);
         date.setFormat12Hour("EEE, d. MMM");
         date.setFormat24Hour("EEE, d. MMM");
@@ -256,6 +275,14 @@ public class MainActivity extends Activity {
         hlp.setMargins(dp(48), 0, dp(48), dp(220));
         root.addView(heroTitle, hlp);
 
+        // Permanent RGB: the title's colours cycle through the whole spectrum.
+        heroRgb = ValueAnimator.ofFloat(0f, 1f);
+        heroRgb.setDuration(5000);
+        heroRgb.setRepeatCount(ValueAnimator.INFINITE);
+        heroRgb.setInterpolator(new android.view.animation.LinearInterpolator());
+        heroRgb.addUpdateListener(a -> paintHeroRgb((float) a.getAnimatedValue()));
+        heroRgb.start();
+
         // Top-left: a greeting that follows the time of day - a bit of warmth.
         greeting = new TextView(this);
         greeting.setTextColor(Color.WHITE);
@@ -264,7 +291,6 @@ public class MainActivity extends Activity {
         greeting.setLetterSpacing(0.02f);
         greeting.setShadowLayer(12, 0, 2, 0x88000000);
         greeting.setText(greetingText());
-        applyTextGradient(greeting);
         FrameLayout.LayoutParams glp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START);
         glp.setMargins(dp(48), dp(30), 0, 0);
         root.addView(greeting, glp);
@@ -350,7 +376,7 @@ public class MainActivity extends Activity {
         g.setShape(GradientDrawable.OVAL);
         g.setGradientType(GradientDrawable.RADIAL_GRADIENT);
         g.setGradientRadius(dp(13));
-        g.setColors(new int[]{0xFFFFF2C0, 0x99FFB300, 0x00000000});   // bright amber glow -> dark
+        g.setColors(new int[]{0xFFFFC24D, 0x44FF8A00, 0x00000000});   // amber glow -> dark (as before)
         View v = new View(this);
         v.setBackground(g);
         return v;
@@ -384,25 +410,35 @@ public class MainActivity extends Activity {
                 .withEndAction(() -> eye.animate().scaleY(1f).setDuration(130).start()).start();
     }
 
-    // A lively multi-colour gradient across the text - cyan -> violet -> pink -> amber.
-    private static final int[] TEXT_COLORS = {0xFF7AF0FF, 0xFFA78BFA, 0xFFFF9FB2, 0xFFFFD48A};
+    // Width of the current hero text, so the RGB gradient spans the whole word.
+    private float heroTextWidth = 1f;
 
-    private void applyTextGradient(TextView tv) {
-        // Measure the upper-cased form too, so an all-caps title still gets the
-        // full gradient span rather than clamping to the last colour.
-        String s = tv.getText().toString();
+    private void measureHero() {
+        String s = heroTitle.getText().toString();
         if (s.isEmpty()) s = " ";
-        float w = Math.max(tv.getPaint().measureText(s),
-                tv.getPaint().measureText(s.toUpperCase(Locale.getDefault())));
-        tv.getPaint().setShader(new LinearGradient(0, 0, w, 0, TEXT_COLORS, null, Shader.TileMode.CLAMP));
-        tv.invalidate();
+        heroTextWidth = Math.max(heroTitle.getPaint().measureText(s),
+                heroTitle.getPaint().measureText(s.toUpperCase(Locale.getDefault())));
+    }
+
+    // Continuously cycling rainbow across the title - a permanent RGB glow.
+    private void paintHeroRgb(float phase) {
+        if (heroTitle == null || heroTitle.getText().length() == 0) return;
+        int n = 6;
+        int[] cols = new int[n + 1];
+        for (int i = 0; i <= n; i++) {
+            float hue = (phase * 360f + i * (360f / n)) % 360f;
+            cols[i] = Color.HSVToColor(new float[]{hue, 0.7f, 1f});
+        }
+        heroTitle.getPaint().setShader(
+                new LinearGradient(0, 0, heroTextWidth, 0, cols, null, Shader.TileMode.CLAMP));
+        heroTitle.invalidate();
     }
 
     private void setHero(String text) {
         if (heroTitle == null) return;
         if (text != null && text.equals(heroTitle.getText().toString())) return;
         heroTitle.setText(text == null ? "" : text);
-        applyTextGradient(heroTitle);
+        measureHero();
         heroTitle.setAlpha(0f);
         heroTitle.setTranslationY(dp(8));
         heroTitle.animate().alpha(1f).translationY(0).setDuration(180).start();
