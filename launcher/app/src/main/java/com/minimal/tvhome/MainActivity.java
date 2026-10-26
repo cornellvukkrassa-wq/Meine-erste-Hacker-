@@ -326,7 +326,50 @@ public class MainActivity extends Activity {
         scroll.addView(grid);
         drawer.addView(scroll, match());
         root.addView(drawer, match());
+
+        addIntro(root);   // plays once on cold start (i.e. when the TV powers on)
         return root;
+    }
+
+    // A short welcome shown when the launcher first appears after boot: a
+    // glowing ring expands while the greeting fades in, then it all clears.
+    private void addIntro(FrameLayout root) {
+        final FrameLayout intro = new FrameLayout(this);
+        intro.setBackgroundColor(0xFF05070D);
+
+        View ring = new View(this);
+        GradientDrawable rg = new GradientDrawable();
+        rg.setShape(GradientDrawable.OVAL);
+        rg.setColor(0x00000000);
+        rg.setStroke(dp(3), 0xFF7AF0FF);
+        ring.setBackground(rg);
+        FrameLayout.LayoutParams rlp = new FrameLayout.LayoutParams(dp(120), dp(120), Gravity.CENTER);
+        rlp.bottomMargin = dp(70);
+        intro.addView(ring, rlp);
+
+        TextView hi = new TextView(this);
+        hi.setText(greetingText());
+        hi.setTextColor(Color.WHITE);
+        hi.setTextSize(40);
+        hi.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+        hi.setShadowLayer(16, 0, 3, 0xAA000000);
+        FrameLayout.LayoutParams tlp = new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER);
+        tlp.topMargin = dp(70);
+        intro.addView(hi, tlp);
+
+        root.addView(intro, match());
+
+        ring.setScaleX(0.3f);
+        ring.setScaleY(0.3f);
+        ring.setAlpha(0f);
+        ring.animate().scaleX(1.6f).scaleY(1.6f).alpha(1f).setDuration(900)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+        hi.setAlpha(0f);
+        hi.setTranslationY(dp(12));
+        hi.animate().alpha(1f).translationY(0).setDuration(900).setStartDelay(250).start();
+
+        intro.postDelayed(() -> intro.animate().alpha(0f).setDuration(650)
+                .withEndAction(() -> root.removeView(intro)).start(), 1700);
     }
 
     private static FrameLayout.LayoutParams match() {
