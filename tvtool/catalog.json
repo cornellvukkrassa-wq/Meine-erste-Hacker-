@@ -1,0 +1,42 @@
+{
+  "_comment": "Known Android TV / Google TV packages. category: ads | telemetry | junk are proposed as one batch; optional is always asked one by one; launcher is only touched by the set-home step. Nothing here is ever uninstalled, only disabled for user 0 (pm disable-user), which `tv.py restore` or restore.sh undoes.",
+  "packages": {
+    "com.google.android.tvrecommendations": {"category": "ads", "desc": "Sponsored / recommended content rows on the stock home screen"},
+    "com.google.android.leanbacklauncher.recommendations": {"category": "ads", "desc": "Recommendation feed for the old Android TV home screen"},
+    "com.google.android.feedback": {"category": "telemetry", "desc": "Google feedback / crash report uploader"},
+    "com.google.android.play.games": {"category": "junk", "desc": "Google Play Games"},
+    "com.android.printspooler": {"category": "junk", "desc": "Print service (TVs don't print)"},
+
+    "com.google.android.katniss": {"category": "optional", "desc": "Google Assistant & voice search (mic button on the remote)"},
+    "com.google.android.apps.mediashell": {"category": "optional", "desc": "Chromecast built-in (casting from your phone)"},
+    "com.google.android.youtube.tv": {"category": "optional", "desc": "YouTube"},
+    "com.google.android.youtube.tvmusic": {"category": "optional", "desc": "YouTube Music"},
+    "com.google.android.videos": {"category": "optional", "desc": "Google TV / Play Movies & TV store"},
+    "com.google.android.backdrop": {"category": "optional", "desc": "Ambient mode screensaver (Android TV)"},
+    "com.google.android.apps.tv.dreamx": {"category": "optional", "desc": "Ambient mode screensaver (Google TV, can show promoted content)"},
+
+    "com.google.android.apps.tv.launcherx": {"category": "launcher", "desc": "Google TV stock home screen (ads, 'For you' tab)"},
+    "com.google.android.tungsten.setupwraith": {"category": "launcher", "desc": "Google TV setup shim - hijacks the Home button if left enabled"},
+    "com.google.android.tvlauncher": {"category": "launcher", "desc": "Android TV stock home screen"},
+    "com.google.android.leanbacklauncher": {"category": "launcher", "desc": "Old Android TV stock home screen"},
+    "com.mitv.tvhome": {"category": "launcher", "desc": "Xiaomi PatchWall home screen"}
+  },
+  "protected_prefixes": [
+    "android", "com.android.systemui", "com.android.settings", "com.android.tv.settings",
+    "com.android.providers.", "com.android.shell", "com.android.packageinstaller",
+    "com.google.android.packageinstaller", "com.android.permissioncontroller",
+    "com.google.android.permissioncontroller", "com.google.android.gms", "com.google.android.gsf",
+    "com.android.vending", "com.google.android.webview", "com.android.webview",
+    "com.android.inputmethod", "com.google.android.inputmethod", "com.google.android.tv.remote",
+    "com.android.bluetooth", "com.android.networkstack", "com.google.android.networkstack",
+    "com.android.wifi", "com.google.android.wifi", "com.android.ext.", "com.google.android.ext.",
+    "com.android.externalstorage", "com.android.keychain", "com.android.certinstaller",
+    "com.android.location", "com.android.phone", "com.android.server", "com.android.se",
+    "com.android.tv.", "com.google.android.tvsetup", "com.google.android.tv.bugreportsender",
+    "com.minimal.tvhome"
+  ],
+  "protected_keywords": ["ota", "update", "upgrade", "hdmi", "cec", "remote", "keyboard", "ime", "input", "tuner", "tvprovider", "audio", "media.codec", "bluetooth", "wifi", "settings", "setupwizard"],
+  "suspect_keywords": ["ad", "ads", "advert", "promo", "recommend", "analytic", "telemetry", "tracking", "tracker", "feedback", "logger", "report", "survey", "usercenter", "appstore", "appmarket", "store", "guide", "partner", "browser", "weather", "game"],
+  "vendor_prefixes": ["com.tcl.", "com.sony.", "com.hisense.", "com.jamdeo.", "com.xiaomi.", "com.mitv.", "org.droidtv.", "com.philips.", "com.tpv.", "com.nvidia.", "com.skyworth.", "com.toshiba.", "com.sharp.", "com.panasonic.", "com.lg.", "com.mediatek.", "com.mstar.", "com.realtek.", "com.amlogic.", "com.rockchip."],
+  "favorite_candidates": ["com.netflix.ninja", "com.google.android.youtube.tv", "com.amazon.amazonvideo.livingroom", "com.disney.disneyplus", "com.spotify.tv.android", "com.plexapp.android", "org.xbmc.kodi", "com.apple.atve.androidtv.appletv", "com.wbd.stream", "tv.pluto.android"]
+}

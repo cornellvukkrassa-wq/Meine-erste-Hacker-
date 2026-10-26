@@ -1,0 +1,6 @@
+state/
+launcher/.gradle/
+launcher/app/build/
+launcher/build/
+__pycache__/
+*.apk
