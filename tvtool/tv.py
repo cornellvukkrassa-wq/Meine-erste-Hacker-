@@ -119,9 +119,25 @@ class Device:
             keygen(str(key))
         self._signer = PythonRSASigner(Path(str(key) + ".pub").read_text(), key.read_text())
         self._AdbDeviceTcp = AdbDeviceTcp
-        self.dev = AdbDeviceTcp(self.host, self.port, default_transport_timeout_s=15)
         print(">> If the TV shows 'Allow USB debugging?', tick 'Always allow' and press OK.")
-        self.dev.connect(rsa_keys=[self._signer], auth_timeout_s=90)
+        # Try at once, then keep trying for ~60s: a TV that just woke from standby
+        # (WiFi-ADB drops in standby) often needs a few seconds before it answers.
+        deadline = time.time() + 60
+        first = True
+        while True:
+            try:
+                self.dev = AdbDeviceTcp(self.host, self.port, default_transport_timeout_s=10)
+                self.dev.connect(rsa_keys=[self._signer], auth_timeout_s=30)
+                return
+            except Exception:
+                if time.time() >= deadline:
+                    die(f"could not reach the TV at {self.serial}. Make sure it is switched on "
+                        f"and awake, on the same Wi-Fi, and that Settings > System > Developer "
+                        f"options > USB/Network debugging is still on, then try again.")
+                if first:
+                    print(f"   {self.host} not answering yet - waiting for the TV to wake up...")
+                    first = False
+                time.sleep(3)
 
     def _reconnect_python(self):
         # Disabling launchers/recommendations or setting Home restarts SystemUI,
