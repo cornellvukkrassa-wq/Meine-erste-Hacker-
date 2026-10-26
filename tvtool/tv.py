@@ -536,6 +536,51 @@ def cmd_tweaks(args):
             print(f"  {key} = {setting_get(dev, ns, key)}")
 
 
+# System-wide DNS ad/tracker blocking over DNS-over-TLS - no root, no app, and
+# a plain setting so restore.sh/`restore` undoes it. Won't stop same-domain
+# in-stream ads (e.g. YouTube), but kills banners, trackers and most app ads.
+DNS_PROVIDERS = {
+    "adguard": "dns.adguard-dns.com",          # ads + trackers (default)
+    "adguard-family": "family.adguard-dns.com",  # also adult-content filtering
+    "cloudflare-family": "family.cloudflare-dns.com",  # malware + adult
+    "nextdns": None,                            # needs your own id.dns.nextdns.io
+}
+
+
+def _put_setting(dev, ns, key, val):
+    old = setting_get(dev, ns, key)
+    if old == val:
+        return
+    if val is None:
+        dev.shell(f"settings delete {ns} {key}")
+    else:
+        dev.shell(f"settings put {ns} {key} {val}")
+    journal({"op": "setting", "ns": ns, "key": key, "old": old, "new": val})
+
+
+def cmd_adblock(args):
+    require_backup()
+    dev = device()
+    if args.provider == "off":
+        _put_setting(dev, "global", "private_dns_mode", "off")
+        _put_setting(dev, "global", "private_dns_specifier", None)
+        print("Ad/tracker DNS blocking disabled (Private DNS off).")
+        return
+    host = DNS_PROVIDERS.get(args.provider, args.provider)
+    if not host:
+        die("nextdns needs your personal hostname, e.g.: "
+            "tv.py adblock abc123.dns.nextdns.io")
+    _put_setting(dev, "global", "private_dns_mode", "hostname")
+    _put_setting(dev, "global", "private_dns_specifier", host)
+    mode = setting_get(dev, "global", "private_dns_mode")
+    got = setting_get(dev, "global", "private_dns_specifier")
+    ok = mode == "hostname" and got == host
+    print(f"Private DNS -> {host} ({'active' if ok else 'mode=' + str(mode)})")
+    print("Blocks ads/trackers system-wide. In-stream video ads (YouTube) are "
+          "not affected. Undo: tv.py adblock off  (or restore).")
+    screenshot(dev, "adblock")
+
+
 def cmd_install_launcher(args):
     require_backup()
     dev = device()
@@ -738,6 +783,11 @@ def main():
     s = sub.add_parser("tweaks", help="speed up animations (asks first)")
     s.add_argument("--yes", action="store_true")
     s.set_defaults(f=cmd_tweaks)
+    s = sub.add_parser("adblock", help="system-wide DNS ad/tracker blocking (no root, reversible)")
+    s.add_argument("provider", nargs="?", default="adguard",
+                   help="adguard (default), adguard-family, cloudflare-family, "
+                        "a NextDNS hostname like abc123.dns.nextdns.io, or 'off'")
+    s.set_defaults(f=cmd_adblock)
     sub.add_parser("apps", help="list launchable TV apps (for picking favourites)").set_defaults(f=cmd_apps)
     s = sub.add_parser("install-launcher", help="install the minimal Home app")
     s.add_argument("apk")
