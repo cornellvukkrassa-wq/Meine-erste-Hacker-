@@ -1,0 +1,41 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.minimal.tvhome"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.minimal.tvhome"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    // A fixed key so every CI build can update the installed app in place.
+    // It only signs this personal sideloaded launcher; it is not a secret.
+    signingConfigs {
+        shared {
+            storeFile file("tvhome.keystore")
+            storePassword "tvhome"
+            keyAlias "tvhome"
+            keyPassword "tvhome"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt")
+            signingConfig signingConfigs.shared
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
