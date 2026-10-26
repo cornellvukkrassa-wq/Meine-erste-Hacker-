@@ -55,10 +55,6 @@ public class MainActivity extends Activity {
     private static final String[] DEFAULT_FAVORITES = {
             "com.netflix.ninja", "com.google.android.youtube.tv", "com.amazon.amazonvideo.livingroom",
             "com.disney.disneyplus", "com.spotify.tv.android", "com.plexapp.android", "org.xbmc.kodi"};
-    // Fallback "wallpapers" when no photos were pushed: dusk, forest, ocean, alpine.
-    private static final int[][] GRADIENTS = {
-            {0xFF0F2027, 0xFF203A43, 0xFF2C5364}, {0xFF0B3D2E, 0xFF1D5C3A, 0xFF4A7C59},
-            {0xFF0A2342, 0xFF126872, 0xFF2CA58D}, {0xFF283E51, 0xFF4B79A1, 0xFF8FB3D9}};
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
@@ -66,6 +62,7 @@ public class MainActivity extends Activity {
     private ImageView[] bg = new ImageView[2];
     private int front = 0;
     private final ObjectAnimator[] drift = new ObjectAnimator[2];
+    private final java.util.List<android.animation.Animator> bgAnims = new ArrayList<>();
     private LinearLayout dock;
     private TextView greeting;
     private TextView heroTitle;
@@ -146,18 +143,24 @@ public class MainActivity extends Activity {
 
     private View buildUi() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        // Deep, slightly diagonal dark base - never a flat single colour.
+        root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{0xFF0A0E1A, 0xFF131A2E, 0xFF0B0F1C}));
+
+        // Soft, slowly drifting colour clouds that suit the dark palette.
+        addAurora(root);
+
         for (int k = 0; k < 2; k++) {
             bg[k] = new ImageView(this);
             bg[k].setScaleType(ImageView.ScaleType.CENTER_CROP);
-            bg[k].setAlpha(k == 0 ? 1f : 0f);
+            bg[k].setAlpha(0f);   // stays empty unless the user adds photos
             root.addView(bg[k], match());
         }
 
-        // Darker, moodier background - a flat dim plus a stronger vignette top and bottom.
+        // A gentle vignette so text and dock stay readable over the colour clouds.
         View scrim = new View(this);
         scrim.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{0x88000000, 0x44000000, 0x55000000, 0xCC000000}));
+                new int[]{0x66000000, 0x1A000000, 0x33000000, 0xAA000000}));
         root.addView(scrim, match());
 
         // Top-right: time, with the weekday and date quietly underneath.
@@ -240,12 +243,14 @@ public class MainActivity extends Activity {
         dock = new LinearLayout(this);
         dock.setOrientation(LinearLayout.HORIZONTAL);
         dock.setGravity(Gravity.CENTER_VERTICAL);
-        dock.setPadding(dp(18), dp(18), dp(18), dp(18));
+        dock.setPadding(dp(14), dp(14), dp(14), dp(14));
         dock.setClipChildren(false);
         dock.setClipToPadding(false);
+        // A lighter, frosted bar so the dock floats rather than sits in a heavy box.
         GradientDrawable glass = new GradientDrawable();
-        glass.setColor(0x40FFFFFF);
-        glass.setCornerRadius(dp(26));
+        glass.setColor(0x1FFFFFFF);
+        glass.setCornerRadius(dp(30));
+        glass.setStroke(dp(1), 0x33FFFFFF);
         dock.setBackground(glass);
         HorizontalScrollView dockScroll = new HorizontalScrollView(this);
         dockScroll.setHorizontalScrollBarEnabled(false);
@@ -272,6 +277,43 @@ public class MainActivity extends Activity {
 
     private static FrameLayout.LayoutParams match() {
         return new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+    }
+
+    // A handful of big, soft, coloured glows drifting on the dark base - subtle
+    // motion that reads as "alive" without photos and never fights the content.
+    private void addAurora(FrameLayout root) {
+        int[][] blobs = {
+                // color(ARGB)  sizeDp  gravity                      dxDp dyDp durMs
+                {0x404C5BD4, 720, Gravity.TOP | Gravity.START,       160,  90, 23000},
+                {0x3826A69A, 640, Gravity.BOTTOM | Gravity.END,     -150, -70, 29000},
+                {0x307E57C2, 560, Gravity.TOP | Gravity.END,        -120, 120, 34000},
+                {0x2A2E77C7, 600, Gravity.BOTTOM | Gravity.START,    130, -90, 26000},
+        };
+        for (int[] b : blobs) {
+            int size = dp(b[1]);
+            GradientDrawable g = new GradientDrawable();
+            g.setShape(GradientDrawable.OVAL);
+            g.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+            g.setGradientRadius(size / 2f);
+            g.setColors(new int[]{b[0], 0x00000000});
+            View v = new View(this);
+            v.setBackground(g);
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size, b[2]);
+            lp.setMargins(-size / 4, -size / 4, -size / 4, -size / 4);
+            root.addView(v, lp);
+            ObjectAnimator move = ObjectAnimator.ofPropertyValuesHolder(v,
+                    PropertyValuesHolder.ofFloat(View.TRANSLATION_X, 0, dp(b[3])),
+                    PropertyValuesHolder.ofFloat(View.TRANSLATION_Y, 0, dp(b[4])),
+                    PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.18f),
+                    PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.18f),
+                    PropertyValuesHolder.ofFloat(View.ALPHA, 0.65f, 1f));
+            move.setDuration(b[5]);
+            move.setRepeatCount(ObjectAnimator.INFINITE);
+            move.setRepeatMode(ObjectAnimator.REVERSE);
+            move.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+            move.start();
+            bgAnims.add(move);
+        }
     }
 
     private void setHero(String text) {
@@ -305,9 +347,11 @@ public class MainActivity extends Activity {
         FrameLayout t = new FrameLayout(this);
         t.setFocusable(true);
         t.setClipToOutline(true);
-        GradientDrawable shape = new GradientDrawable();
-        shape.setCornerRadius(dp(14));
-        shape.setColor(0xFF2A2A2E);
+        // A soft translucent card with a hairline edge - clean, not a heavy block.
+        final GradientDrawable shape = new GradientDrawable();
+        shape.setCornerRadius(dp(16));
+        shape.setColor(0xD91B1D26);
+        shape.setStroke(dp(1), 0x22FFFFFF);
         t.setBackground(shape);
         if (app.banner != null) {
             ImageView iv = new ImageView(this);
@@ -321,22 +365,27 @@ public class MainActivity extends Activity {
             if (app.icon != null) {
                 ImageView iv = new ImageView(this);
                 iv.setImageDrawable(app.icon);
-                col.addView(iv, new LinearLayout.LayoutParams(dp(48), dp(48)));
+                LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(38), dp(38));
+                ip.bottomMargin = dp(8);
+                col.addView(iv, ip);
             }
             TextView tv = new TextView(this);
             tv.setText(app.label);
-            tv.setTextColor(Color.WHITE);
-            tv.setTextSize(13);
+            tv.setTextColor(0xF2FFFFFF);
+            tv.setTextSize(12);
+            tv.setLetterSpacing(0.02f);
             tv.setSingleLine(true);
             tv.setEllipsize(TextUtils.TruncateAt.END);
             tv.setGravity(Gravity.CENTER);
-            tv.setPadding(dp(8), dp(6), dp(8), 0);
+            tv.setPadding(dp(10), 0, dp(10), 0);
             col.addView(tv);
             t.addView(col, match());
         }
         t.setOnFocusChangeListener((v, has) -> {
-            float s = has ? 1.12f : 1f;
-            v.animate().scaleX(s).scaleY(s).translationZ(has ? dp(10) : 0).setDuration(150).start();
+            float s = has ? 1.08f : 1f;
+            v.animate().scaleX(s).scaleY(s).translationZ(has ? dp(12) : 0).setDuration(160).start();
+            // Clean highlight: a bright hairline ring instead of a big jump in size.
+            shape.setStroke(dp(has ? 3 : 1), has ? 0xF2FFFFFF : 0x22FFFFFF);
             // Only the dock drives the big center title; the drawer has its own grid.
             if (has && inDock) setHero(app.pkg.isEmpty() ? "Alle Apps" : app.label);
         });
@@ -349,8 +398,9 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams dockTileParams() {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(200), dp(112));
-        lp.setMargins(dp(10), 0, dp(10), 0);
+        // Slimmer tiles with more air between them - less crammed, more elegant.
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(172), dp(100));
+        lp.setMargins(dp(13), 0, dp(13), 0);
         return lp;
     }
 
@@ -373,9 +423,9 @@ public class MainActivity extends Activity {
         grid.removeAllViews();
         for (App a : loadApps().values()) {
             GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
-            lp.width = dp(200);
-            lp.height = dp(112);
-            lp.setMargins(dp(12), dp(12), dp(12), dp(12));
+            lp.width = dp(172);
+            lp.height = dp(100);
+            lp.setMargins(dp(16), dp(16), dp(16), dp(16));
             grid.addView(tile(a, false), lp);
         }
         drawer.setVisibility(View.VISIBLE);
@@ -480,16 +530,14 @@ public class MainActivity extends Activity {
 
     private void nextWallpaper() {
         if (walls.isEmpty()) {
-            wallIndex = (wallIndex + 1) % GRADIENTS.length;
-            show(null, GRADIENTS[wallIndex]);
-            return;
+            return;   // no photos: the animated aurora background carries the screen
         }
         wallIndex = (wallIndex + 1) % walls.size();
         final File f = walls.get(wallIndex);
         final int w = getResources().getDisplayMetrics().widthPixels;
         io.execute(() -> {
             Bitmap b = decode(f, Math.max(w, 1280));
-            handler.post(() -> show(b, GRADIENTS[0]));
+            if (b != null) handler.post(() -> show(b));
         });
     }
 
@@ -505,14 +553,10 @@ public class MainActivity extends Activity {
         return BitmapFactory.decodeFile(f.getPath(), o);
     }
 
-    private void show(Bitmap bitmap, int[] fallback) {
+    private void show(Bitmap bitmap) {
         final ImageView out = bg[front];
         final ImageView in = bg[1 - front];
-        if (bitmap != null) {
-            in.setImageBitmap(bitmap);
-        } else {
-            in.setImageDrawable(new GradientDrawable(GradientDrawable.Orientation.TL_BR, fallback));
-        }
+        in.setImageBitmap(bitmap);
         in.animate().alpha(1f).setDuration(1500).start();
         // Slow drift for a little life, like the Apple TV aerials.
         if (drift[1 - front] != null) drift[1 - front].cancel();
@@ -529,5 +573,6 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         io.shutdownNow();
+        for (android.animation.Animator a : bgAnims) a.cancel();
     }
 }
