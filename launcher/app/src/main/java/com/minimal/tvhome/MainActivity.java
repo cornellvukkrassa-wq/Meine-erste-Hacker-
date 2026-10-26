@@ -68,6 +68,7 @@ public class MainActivity extends Activity {
     private final ObjectAnimator[] drift = new ObjectAnimator[2];
     private LinearLayout dock;
     private TextView greeting;
+    private TextView heroTitle;
     private FrameLayout drawer;
     private GridLayout grid;
     private List<File> walls = new ArrayList<>();
@@ -181,9 +182,49 @@ public class MainActivity extends Activity {
         date.setShadowLayer(8, 0, 1, 0x88000000);
         date.setGravity(Gravity.END);
         clockCol.addView(date);
+
+        // A settings button sits next to the clock, reachable with the D-pad.
+        FrameLayout settingsBtn = new FrameLayout(this);
+        settingsBtn.setFocusable(true);
+        GradientDrawable gearBg = new GradientDrawable();
+        gearBg.setShape(GradientDrawable.OVAL);
+        gearBg.setColor(0x33FFFFFF);
+        settingsBtn.setBackground(gearBg);
+        ImageView gear = new ImageView(this);
+        gear.setImageDrawable(getDrawable(android.R.drawable.ic_menu_manage));
+        gear.setColorFilter(Color.WHITE);
+        FrameLayout.LayoutParams gip = new FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER);
+        settingsBtn.addView(gear, gip);
+        settingsBtn.setOnFocusChangeListener((v, has) -> {
+            v.animate().scaleX(has ? 1.2f : 1f).scaleY(has ? 1.2f : 1f).setDuration(150).start();
+            ((GradientDrawable) v.getBackground()).setColor(has ? 0x66FFFFFF : 0x33FFFFFF);
+            if (has) setHero("Einstellungen");
+        });
+        settingsBtn.setOnClickListener(v -> openSettings());
+
+        LinearLayout topRow = new LinearLayout(this);
+        topRow.setOrientation(LinearLayout.HORIZONTAL);
+        topRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams gbp = new LinearLayout.LayoutParams(dp(52), dp(52));
+        gbp.setMargins(0, 0, dp(22), 0);
+        topRow.addView(settingsBtn, gbp);
+        topRow.addView(clockCol);
         FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
         clp.setMargins(0, dp(28), dp(48), 0);
-        root.addView(clockCol, clp);
+        root.addView(topRow, clp);
+
+        // Center stage: the name of the currently focused app, large and light,
+        // updating as you move along the dock - fills the screen, Apple-TV style.
+        heroTitle = new TextView(this);
+        heroTitle.setTextColor(Color.WHITE);
+        heroTitle.setTextSize(52);
+        heroTitle.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+        heroTitle.setShadowLayer(16, 0, 3, 0xAA000000);
+        heroTitle.setSingleLine(true);
+        heroTitle.setEllipsize(TextUtils.TruncateAt.END);
+        FrameLayout.LayoutParams hlp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        hlp.setMargins(dp(48), 0, dp(48), dp(220));
+        root.addView(heroTitle, hlp);
 
         // Top-left: a greeting that follows the time of day - a bit of warmth.
         greeting = new TextView(this);
@@ -233,6 +274,24 @@ public class MainActivity extends Activity {
         return new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
     }
 
+    private void setHero(String text) {
+        if (heroTitle == null) return;
+        if (text != null && text.equals(heroTitle.getText().toString())) return;
+        heroTitle.setText(text == null ? "" : text);
+        heroTitle.setAlpha(0f);
+        heroTitle.setTranslationY(dp(8));
+        heroTitle.animate().alpha(1f).translationY(0).setDuration(180).start();
+    }
+
+    private void openSettings() {
+        try {
+            startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (RuntimeException e) {
+            Toast.makeText(this, "Einstellungen nicht verfügbar", Toast.LENGTH_SHORT).show();
+        }
+    }
+
     private String greetingText() {
         int h = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
         if (h < 5) return "Gute Nacht";
@@ -278,6 +337,8 @@ public class MainActivity extends Activity {
         t.setOnFocusChangeListener((v, has) -> {
             float s = has ? 1.12f : 1f;
             v.animate().scaleX(s).scaleY(s).translationZ(has ? dp(10) : 0).setDuration(150).start();
+            // Only the dock drives the big center title; the drawer has its own grid.
+            if (has && inDock) setHero(app.pkg.isEmpty() ? "Alle Apps" : app.label);
         });
         t.setOnClickListener(v -> launch(app.pkg));
         t.setOnLongClickListener(v -> {
