@@ -10,6 +10,8 @@ import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -111,12 +113,15 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (greeting != null) greeting.setText(greetingText());
+        if (greeting != null) {
+            greeting.setText(greetingText());
+            applyTextGradient(greeting);
+        }
         buildDock();
         handler.removeCallbacks(rotate);
         handler.post(rotate);
         handler.removeCallbacks(eyesRunnable);
-        handler.postDelayed(eyesRunnable, 8000);   // first sighting a few seconds in
+        handler.postDelayed(eyesRunnable, 4000);   // first sighting a few seconds in
     }
 
     @Override
@@ -177,9 +182,9 @@ public class MainActivity extends Activity {
         eyes = new LinearLayout(this);
         eyes.setOrientation(LinearLayout.HORIZONTAL);
         eyes.setAlpha(0f);
-        eyes.addView(eyeL, new LinearLayout.LayoutParams(dp(20), dp(20)));
-        LinearLayout.LayoutParams erp = new LinearLayout.LayoutParams(dp(20), dp(20));
-        erp.leftMargin = dp(26);
+        eyes.addView(eyeL, new LinearLayout.LayoutParams(dp(24), dp(24)));
+        LinearLayout.LayoutParams erp = new LinearLayout.LayoutParams(dp(24), dp(24));
+        erp.leftMargin = dp(28);
         eyes.addView(eyeR, erp);
         root.addView(eyes, new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START));
 
@@ -240,9 +245,10 @@ public class MainActivity extends Activity {
         // updating as you move along the dock - fills the screen, Apple-TV style.
         heroTitle = new TextView(this);
         heroTitle.setTextColor(Color.WHITE);
-        heroTitle.setTextSize(52);
-        heroTitle.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
-        heroTitle.setShadowLayer(16, 0, 3, 0xAA000000);
+        heroTitle.setTextSize(54);
+        heroTitle.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        heroTitle.setLetterSpacing(0.01f);
+        heroTitle.setShadowLayer(18, 0, 3, 0xAA000000);
         heroTitle.setSingleLine(true);
         heroTitle.setEllipsize(TextUtils.TruncateAt.END);
         FrameLayout.LayoutParams hlp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
@@ -252,10 +258,12 @@ public class MainActivity extends Activity {
         // Top-left: a greeting that follows the time of day - a bit of warmth.
         greeting = new TextView(this);
         greeting.setTextColor(Color.WHITE);
-        greeting.setTextSize(30);
-        greeting.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+        greeting.setTextSize(32);
+        greeting.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        greeting.setLetterSpacing(0.02f);
         greeting.setShadowLayer(12, 0, 2, 0x88000000);
         greeting.setText(greetingText());
+        applyTextGradient(greeting);
         FrameLayout.LayoutParams glp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START);
         glp.setMargins(dp(48), dp(30), 0, 0);
         root.addView(greeting, glp);
@@ -340,8 +348,8 @@ public class MainActivity extends Activity {
         GradientDrawable g = new GradientDrawable();
         g.setShape(GradientDrawable.OVAL);
         g.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        g.setGradientRadius(dp(10));
-        g.setColors(new int[]{0xFFFFC24D, 0x44FF8A00, 0x00000000});   // amber glow -> dark
+        g.setGradientRadius(dp(13));
+        g.setColors(new int[]{0xFFFFF2C0, 0x99FFB300, 0x00000000});   // bright amber glow -> dark
         View v = new View(this);
         v.setBackground(g);
         return v;
@@ -360,11 +368,11 @@ public class MainActivity extends Activity {
             }
             eyeL.setScaleY(1f);
             eyeR.setScaleY(1f);
-            eyes.animate().alpha(0.9f).setDuration(1400).start();
-            handler.postDelayed(() -> blink(eyeL), 2200);
-            handler.postDelayed(() -> blink(eyeR), 2260);
-            handler.postDelayed(() -> eyes.animate().alpha(0f).setDuration(1600).start(), 3200);
-            handler.postDelayed(this, 22000 + rnd.nextInt(26000));   // 22-48s later
+            eyes.animate().alpha(1f).setDuration(1100).start();
+            handler.postDelayed(() -> blink(eyeL), 1900);
+            handler.postDelayed(() -> blink(eyeR), 1960);
+            handler.postDelayed(() -> eyes.animate().alpha(0f).setDuration(1300).start(), 2900);
+            handler.postDelayed(this, 9000 + rnd.nextInt(9000));   // 9-18s later
         }
     };
 
@@ -373,10 +381,21 @@ public class MainActivity extends Activity {
                 .withEndAction(() -> eye.animate().scaleY(1f).setDuration(130).start()).start();
     }
 
+    // A lively multi-colour gradient across the text - cyan -> violet -> pink -> amber.
+    private static final int[] TEXT_COLORS = {0xFF7AF0FF, 0xFFA78BFA, 0xFFFF9FB2, 0xFFFFD48A};
+
+    private void applyTextGradient(TextView tv) {
+        String s = tv.getText().toString();
+        float w = tv.getPaint().measureText(s.isEmpty() ? " " : s);
+        tv.getPaint().setShader(new LinearGradient(0, 0, w, 0, TEXT_COLORS, null, Shader.TileMode.CLAMP));
+        tv.invalidate();
+    }
+
     private void setHero(String text) {
         if (heroTitle == null) return;
         if (text != null && text.equals(heroTitle.getText().toString())) return;
         heroTitle.setText(text == null ? "" : text);
+        applyTextGradient(heroTitle);
         heroTitle.setAlpha(0f);
         heroTitle.setTranslationY(dp(8));
         heroTitle.animate().alpha(1f).translationY(0).setDuration(180).start();
