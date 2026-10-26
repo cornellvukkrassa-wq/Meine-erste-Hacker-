@@ -4,7 +4,10 @@ import android.animation.ObjectAnimator;
 import android.animation.PropertyValuesHolder;
 import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -73,6 +76,8 @@ public class MainActivity extends Activity {
     private ValueAnimator heroRgb;
     private EyePair[] eyePairs;
     private Runnable[] eyeTasks;
+    private FrameLayout goodbye;
+    private BroadcastReceiver screenOff;
     private final java.util.Random rnd = new java.util.Random();
     private FrameLayout drawer;
     private GridLayout grid;
@@ -103,6 +108,18 @@ public class MainActivity extends Activity {
         setContentView(buildUi());
         handleIntent(getIntent());
         loadWallpaperList();
+        // Try to flash a farewell the instant the screen is switched off. On many
+        // TVs the panel goes dark too fast to see it - that is a hardware limit,
+        // not a bug; a real shutdown screen would need root.
+        screenOff = new BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent i) {
+                if (goodbye != null) {
+                    goodbye.setAlpha(1f);
+                    goodbye.setVisibility(View.VISIBLE);
+                }
+            }
+        };
+        registerReceiver(screenOff, new IntentFilter(Intent.ACTION_SCREEN_OFF));
     }
 
     @Override
@@ -116,6 +133,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (goodbye != null) {
+            goodbye.setVisibility(View.GONE);   // clear the farewell when we wake again
+            goodbye.setAlpha(0f);
+        }
         if (greeting != null) greeting.setText(greetingText());
         if (heroRgb != null) {
             if (heroRgb.isPaused()) heroRgb.resume(); else if (!heroRgb.isStarted()) heroRgb.start();
@@ -326,6 +347,20 @@ public class MainActivity extends Activity {
         scroll.addView(grid);
         drawer.addView(scroll, match());
         root.addView(drawer, match());
+
+        // Farewell overlay (shown by the screen-off receiver), kept on top and hidden.
+        goodbye = new FrameLayout(this);
+        goodbye.setBackgroundColor(0xFF05070D);
+        goodbye.setVisibility(View.GONE);
+        goodbye.setAlpha(0f);
+        TextView bye = new TextView(this);
+        bye.setText("Auf Wiedersehen");
+        bye.setTextColor(Color.WHITE);
+        bye.setTextSize(40);
+        bye.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+        bye.setShadowLayer(16, 0, 3, 0xAA000000);
+        goodbye.addView(bye, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+        root.addView(goodbye, match());
 
         addIntro(root);   // plays once on cold start (i.e. when the TV powers on)
         return root;
@@ -765,5 +800,8 @@ public class MainActivity extends Activity {
         super.onDestroy();
         io.shutdownNow();
         for (android.animation.Animator a : bgAnims) a.cancel();
+        if (screenOff != null) {
+            try { unregisterReceiver(screenOff); } catch (RuntimeException ignored) {}
+        }
     }
 }
