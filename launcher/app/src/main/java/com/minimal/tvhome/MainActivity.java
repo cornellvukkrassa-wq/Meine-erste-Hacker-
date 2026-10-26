@@ -67,6 +67,7 @@ public class MainActivity extends Activity {
     private int front = 0;
     private final ObjectAnimator[] drift = new ObjectAnimator[2];
     private LinearLayout dock;
+    private TextView greeting;
     private FrameLayout drawer;
     private GridLayout grid;
     private List<File> walls = new ArrayList<>();
@@ -109,6 +110,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (greeting != null) greeting.setText(greetingText());
         buildDock();
         handler.removeCallbacks(rotate);
         handler.post(rotate);
@@ -151,11 +153,16 @@ public class MainActivity extends Activity {
             root.addView(bg[k], match());
         }
 
+        // Darker, moodier background - a flat dim plus a stronger vignette top and bottom.
         View scrim = new View(this);
         scrim.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{0x55000000, 0x00000000, 0x00000000, 0xAA000000}));
+                new int[]{0x88000000, 0x44000000, 0x55000000, 0xCC000000}));
         root.addView(scrim, match());
 
+        // Top-right: time, with the weekday and date quietly underneath.
+        LinearLayout clockCol = new LinearLayout(this);
+        clockCol.setOrientation(LinearLayout.VERTICAL);
+        clockCol.setGravity(Gravity.END);
         TextClock clock = new TextClock(this);
         clock.setFormat12Hour("h:mm");
         clock.setFormat24Hour("HH:mm");
@@ -163,9 +170,31 @@ public class MainActivity extends Activity {
         clock.setTextSize(34);
         clock.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
         clock.setShadowLayer(12, 0, 2, 0x88000000);
+        clock.setGravity(Gravity.END);
+        clockCol.addView(clock);
+        TextClock date = new TextClock(this);
+        date.setFormat12Hour("EEE, d. MMM");
+        date.setFormat24Hour("EEE, d. MMM");
+        date.setTextColor(0xCCFFFFFF);
+        date.setTextSize(15);
+        date.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+        date.setShadowLayer(8, 0, 1, 0x88000000);
+        date.setGravity(Gravity.END);
+        clockCol.addView(date);
         FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
         clp.setMargins(0, dp(28), dp(48), 0);
-        root.addView(clock, clp);
+        root.addView(clockCol, clp);
+
+        // Top-left: a greeting that follows the time of day - a bit of warmth.
+        greeting = new TextView(this);
+        greeting.setTextColor(Color.WHITE);
+        greeting.setTextSize(30);
+        greeting.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+        greeting.setShadowLayer(12, 0, 2, 0x88000000);
+        greeting.setText(greetingText());
+        FrameLayout.LayoutParams glp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START);
+        glp.setMargins(dp(48), dp(30), 0, 0);
+        root.addView(greeting, glp);
 
         dock = new LinearLayout(this);
         dock.setOrientation(LinearLayout.HORIZONTAL);
@@ -202,6 +231,15 @@ public class MainActivity extends Activity {
 
     private static FrameLayout.LayoutParams match() {
         return new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+    }
+
+    private String greetingText() {
+        int h = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
+        if (h < 5) return "Gute Nacht";
+        if (h < 11) return "Guten Morgen";
+        if (h < 17) return "Guten Tag";
+        if (h < 22) return "Guten Abend";
+        return "Gute Nacht";
     }
 
     private View tile(final App app, final boolean inDock) {
