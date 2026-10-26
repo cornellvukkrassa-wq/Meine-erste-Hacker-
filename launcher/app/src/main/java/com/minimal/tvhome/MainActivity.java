@@ -121,7 +121,7 @@ public class MainActivity extends Activity {
         handler.removeCallbacks(rotate);
         handler.post(rotate);
         handler.removeCallbacks(eyesRunnable);
-        handler.postDelayed(eyesRunnable, 4000);   // first sighting a few seconds in
+        handler.postDelayed(eyesRunnable, 3000);   // first sighting a few seconds in
     }
 
     @Override
@@ -245,10 +245,11 @@ public class MainActivity extends Activity {
         // updating as you move along the dock - fills the screen, Apple-TV style.
         heroTitle = new TextView(this);
         heroTitle.setTextColor(Color.WHITE);
-        heroTitle.setTextSize(54);
+        heroTitle.setTextSize(58);
         heroTitle.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        heroTitle.setLetterSpacing(0.01f);
-        heroTitle.setShadowLayer(18, 0, 3, 0xAA000000);
+        heroTitle.setLetterSpacing(0.04f);
+        heroTitle.setAllCaps(true);
+        heroTitle.setShadowLayer(26, 0, 4, 0xB3000000);   // soft cinematic glow
         heroTitle.setSingleLine(true);
         heroTitle.setEllipsize(TextUtils.TruncateAt.END);
         FrameLayout.LayoutParams hlp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
@@ -368,11 +369,13 @@ public class MainActivity extends Activity {
             }
             eyeL.setScaleY(1f);
             eyeR.setScaleY(1f);
-            eyes.animate().alpha(1f).setDuration(1100).start();
-            handler.postDelayed(() -> blink(eyeL), 1900);
-            handler.postDelayed(() -> blink(eyeR), 1960);
-            handler.postDelayed(() -> eyes.animate().alpha(0f).setDuration(1300).start(), 2900);
-            handler.postDelayed(this, 9000 + rnd.nextInt(9000));   // 9-18s later
+            eyes.animate().alpha(1f).setDuration(900).start();
+            // Randomly: both blink, only one, or neither - so it feels alive.
+            int who = rnd.nextInt(4);
+            if (who == 0 || who == 1) handler.postDelayed(() -> blink(eyeL), 1500);
+            if (who == 0 || who == 2) handler.postDelayed(() -> blink(eyeR), 1560);
+            handler.postDelayed(() -> eyes.animate().alpha(0f).setDuration(1100).start(), 2300);
+            handler.postDelayed(this, 3000 + rnd.nextInt(3000));   // every ~3-6s
         }
     };
 
@@ -385,8 +388,12 @@ public class MainActivity extends Activity {
     private static final int[] TEXT_COLORS = {0xFF7AF0FF, 0xFFA78BFA, 0xFFFF9FB2, 0xFFFFD48A};
 
     private void applyTextGradient(TextView tv) {
+        // Measure the upper-cased form too, so an all-caps title still gets the
+        // full gradient span rather than clamping to the last colour.
         String s = tv.getText().toString();
-        float w = tv.getPaint().measureText(s.isEmpty() ? " " : s);
+        if (s.isEmpty()) s = " ";
+        float w = Math.max(tv.getPaint().measureText(s),
+                tv.getPaint().measureText(s.toUpperCase(Locale.getDefault())));
         tv.getPaint().setShader(new LinearGradient(0, 0, w, 0, TEXT_COLORS, null, Shader.TileMode.CLAMP));
         tv.invalidate();
     }
