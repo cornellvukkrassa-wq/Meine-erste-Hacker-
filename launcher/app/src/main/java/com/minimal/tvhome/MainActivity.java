@@ -66,6 +66,9 @@ public class MainActivity extends Activity {
     private LinearLayout dock;
     private TextView greeting;
     private TextView heroTitle;
+    private LinearLayout eyes;
+    private View eyeL, eyeR;
+    private final java.util.Random rnd = new java.util.Random();
     private FrameLayout drawer;
     private GridLayout grid;
     private List<File> walls = new ArrayList<>();
@@ -112,12 +115,16 @@ public class MainActivity extends Activity {
         buildDock();
         handler.removeCallbacks(rotate);
         handler.post(rotate);
+        handler.removeCallbacks(eyesRunnable);
+        handler.postDelayed(eyesRunnable, 8000);   // first sighting a few seconds in
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         handler.removeCallbacks(rotate);
+        handler.removeCallbacks(eyesRunnable);
+        if (eyes != null) eyes.setAlpha(0f);
     }
 
     @Override
@@ -162,6 +169,19 @@ public class MainActivity extends Activity {
         scrim.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{0x66000000, 0x1A000000, 0x33000000, 0xAA000000}));
         root.addView(scrim, match());
+
+        // Easter egg: a pair of glowing eyes that now and then peer out of the
+        // dark, blink once and vanish - our own spooky touch, no FNAF assets.
+        eyeL = glowEye();
+        eyeR = glowEye();
+        eyes = new LinearLayout(this);
+        eyes.setOrientation(LinearLayout.HORIZONTAL);
+        eyes.setAlpha(0f);
+        eyes.addView(eyeL, new LinearLayout.LayoutParams(dp(20), dp(20)));
+        LinearLayout.LayoutParams erp = new LinearLayout.LayoutParams(dp(20), dp(20));
+        erp.leftMargin = dp(26);
+        eyes.addView(eyeR, erp);
+        root.addView(eyes, new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START));
 
         // Top-right: time, with the weekday and date quietly underneath.
         LinearLayout clockCol = new LinearLayout(this);
@@ -243,14 +263,14 @@ public class MainActivity extends Activity {
         dock = new LinearLayout(this);
         dock.setOrientation(LinearLayout.HORIZONTAL);
         dock.setGravity(Gravity.CENTER_VERTICAL);
-        dock.setPadding(dp(14), dp(14), dp(14), dp(14));
+        dock.setPadding(dp(10), dp(10), dp(10), dp(10));
         dock.setClipChildren(false);
         dock.setClipToPadding(false);
         // A lighter, frosted bar so the dock floats rather than sits in a heavy box.
         GradientDrawable glass = new GradientDrawable();
-        glass.setColor(0x1FFFFFFF);
-        glass.setCornerRadius(dp(30));
-        glass.setStroke(dp(1), 0x33FFFFFF);
+        glass.setColor(0x1AFFFFFF);
+        glass.setCornerRadius(dp(24));
+        glass.setStroke(dp(1), 0x2EFFFFFF);
         dock.setBackground(glass);
         HorizontalScrollView dockScroll = new HorizontalScrollView(this);
         dockScroll.setHorizontalScrollBarEnabled(false);
@@ -316,6 +336,43 @@ public class MainActivity extends Activity {
         }
     }
 
+    private View glowEye() {
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+        g.setGradientRadius(dp(10));
+        g.setColors(new int[]{0xFFFFC24D, 0x44FF8A00, 0x00000000});   // amber glow -> dark
+        View v = new View(this);
+        v.setBackground(g);
+        return v;
+    }
+
+    // Appear at a random dark spot, hold, blink once, fade out, then schedule
+    // the next sighting a good while later. Posted/removed with resume/pause.
+    private final Runnable eyesRunnable = new Runnable() {
+        @Override public void run() {
+            if (eyes == null) return;
+            View root = eyes.getRootView();
+            int rw = root.getWidth(), rh = root.getHeight();
+            if (rw > dp(260) && rh > dp(400)) {
+                eyes.setTranslationX(dp(80) + rnd.nextInt(rw - dp(240)));
+                eyes.setTranslationY(dp(140) + rnd.nextInt(rh - dp(320)));
+            }
+            eyeL.setScaleY(1f);
+            eyeR.setScaleY(1f);
+            eyes.animate().alpha(0.9f).setDuration(1400).start();
+            handler.postDelayed(() -> blink(eyeL), 2200);
+            handler.postDelayed(() -> blink(eyeR), 2260);
+            handler.postDelayed(() -> eyes.animate().alpha(0f).setDuration(1600).start(), 3200);
+            handler.postDelayed(this, 22000 + rnd.nextInt(26000));   // 22-48s later
+        }
+    };
+
+    private void blink(View eye) {
+        eye.animate().scaleY(0.1f).setDuration(110)
+                .withEndAction(() -> eye.animate().scaleY(1f).setDuration(130).start()).start();
+    }
+
     private void setHero(String text) {
         if (heroTitle == null) return;
         if (text != null && text.equals(heroTitle.getText().toString())) return;
@@ -365,8 +422,8 @@ public class MainActivity extends Activity {
             if (app.icon != null) {
                 ImageView iv = new ImageView(this);
                 iv.setImageDrawable(app.icon);
-                LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(38), dp(38));
-                ip.bottomMargin = dp(8);
+                LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(32), dp(32));
+                ip.bottomMargin = dp(6);
                 col.addView(iv, ip);
             }
             TextView tv = new TextView(this);
@@ -398,9 +455,9 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams dockTileParams() {
-        // Slimmer tiles with more air between them - less crammed, more elegant.
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(172), dp(100));
-        lp.setMargins(dp(13), 0, dp(13), 0);
+        // Smaller tiles with air between them - compact and clean, not crammed.
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(150), dp(86));
+        lp.setMargins(dp(11), 0, dp(11), 0);
         return lp;
     }
 
@@ -423,9 +480,9 @@ public class MainActivity extends Activity {
         grid.removeAllViews();
         for (App a : loadApps().values()) {
             GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
-            lp.width = dp(172);
-            lp.height = dp(100);
-            lp.setMargins(dp(16), dp(16), dp(16), dp(16));
+            lp.width = dp(150);
+            lp.height = dp(86);
+            lp.setMargins(dp(14), dp(14), dp(14), dp(14));
             grid.addView(tile(a, false), lp);
         }
         drawer.setVisibility(View.VISIBLE);
